@@ -115,14 +115,22 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
      */
     @Override
     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+        Log.v(TAG, "onItemSelected(): enter");
+
         switch (parent.getId()){
-            case 2131230845:
+            case R.id.spinner_department:
+                Log.d(TAG, "onItemSelected(): department changed");
                 department = parent.getItemAtPosition(position).toString();
                 break;
-            case 2131230846:
+            case R.id.spinner_job:
+                Log.d(TAG, "onItemSelected(): job changed");
                 job = parent.getItemAtPosition(position).toString();
                 break;
+            default:
+                Log.d(TAG, "onItemSelected(): item selected, but no values changed?");
         }
+
+        Log.v(TAG, "onItemSelected(): leave");
     }
 
     /**
