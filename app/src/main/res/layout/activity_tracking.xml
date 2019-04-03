@@ -19,14 +19,15 @@
     <ListView
         android:id="@+id/listView_beaconstatus"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
         android:orientation="vertical"
-        app:layout_constraintHeight_percent=".9"
+        app:layout_constraintHeight_percent=".75"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView_status"
         app:layout_constraintBottom_toTopOf="@+id/layout_buttons"
-        app:layout_constraintWidth_percent=".9"/>
+        app:layout_constraintWidth_percent=".9"
+        />
 
     <LinearLayout
         android:id="@+id/layout_buttons"
@@ -38,6 +39,7 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/listView_beaconstatus"
+        app:layout_constraintBottom_toTopOf="parent"
         app:layout_constraintWidth_percent=".7">
 
         <Button
