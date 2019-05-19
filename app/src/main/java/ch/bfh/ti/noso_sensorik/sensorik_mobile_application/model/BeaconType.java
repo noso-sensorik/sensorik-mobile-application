@@ -6,7 +6,8 @@ import java.util.Map;
 public enum BeaconType {
     STATIONARY_BED(1),
     STATIONARY_DISPENSER(2),
-    MOBILE_SCRUB_BOTTLE(3);
+    MOBILE_SCRUB_BOTTLE(3),
+    SEMI_STATIONARY_DISPENSER(4);
 
     private final int type;
     private static Map map = new HashMap<>();
@@ -21,8 +22,8 @@ public enum BeaconType {
         }
     }
 
-    public static BeaconType valueOf(int pageType) {
-        return (BeaconType) map.get(pageType);
+    public static BeaconType valueOf(int beaconType) {
+        return (BeaconType) map.get(beaconType);
     }
 
     public int getValue() {

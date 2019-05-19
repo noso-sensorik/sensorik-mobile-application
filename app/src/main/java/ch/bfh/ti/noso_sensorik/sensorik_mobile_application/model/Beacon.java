@@ -15,8 +15,15 @@ import lombok.Data;
  *
  */
 public class Beacon {
+    //    private BeaconType type;
+    // 1 = STATIONARY_BED // 2 = STATIONARY_DISPENSER // 3 = MOBILE_SCRUB_BOTTLE // 4 = SEMI_STATIONARY_DISPENSER
+    public static final int STATIONARY_BED              = 1;
+    public static final int STATIONARY_DISPENSER        = 2;
+    public static final int MOBILE_SCRUB_BOTTLE         = 3;
+    public static final int SEMI_STATIONARY_DISPENSER   = 4;
+
     private @Id @GeneratedValue Long id;
-    private BeaconType type;
+    private int type;
     private String label;
     private String model;
     private String manufacturer;
@@ -26,13 +33,12 @@ public class Beacon {
 //    @OneToMany
 //    private Collection<Event> eventList = new ArrayList<Event>();
 
-    public Beacon(BeaconType type, String label, String model, String manufacturer, String loc, String mac ) {
+    public Beacon(int type, String label, String model, String manufacturer, String location, String macadress ) {
         this.type = type;
         this.label = label;
         this.model = model;
         this.manufacturer = manufacturer;
-        this.location = loc;
-        this.macadress = mac;
-
+        this.location = location;
+        this.macadress = macadress;
     }
 }

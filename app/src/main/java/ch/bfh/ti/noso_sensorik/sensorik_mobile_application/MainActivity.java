@@ -33,6 +33,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         setContentView(R.layout.activity_main);
 
         prepareFormSpinner();
+        prepareScrubbottleSelection();
         checkPermissions();
     }
 
@@ -55,6 +56,14 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         // set job/dep string from default selection
         job = adapter_job.getItem(0).toString();
         department = adapter_dep.getItem(0).toString();
+    }
+
+    // HACK IDEA: display all found scrubbottle sensor (Major == 3) in range -
+    // make user select the one he has based on the name/id (like 'ntZ2co')
+    // and save the name in the application and keep tabs on the sensor during Tracking Activity
+    // (maybe make a filter for it?) and analyse its acceleratings
+    protected void prepareScrubbottleSelection(){
+
     }
 
     //Since Android Marshmallow starting a Bluetooth Low Energy scan requires permission from location group.
@@ -88,7 +97,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
      * @param view
      */
     public void startTracking(View view) {
-        Log.d(TAG, "button selected, start tracking");
+        Log.d(TAG, "startTracking(): button selected, start tracking");
         if( ((department != null) && (job != null)) &&  (!(department.isEmpty()) && !(job.isEmpty())) ){
             Log.d(TAG, "Department is: '"+department+ "' and Job is: '"+job+ "'");
 

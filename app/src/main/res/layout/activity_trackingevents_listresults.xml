@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/layout_trackingresults"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    >
+
+    <LinearLayout
+        android:id="@+id/layout_trackingeventsresult_line"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/layout_event_line"
+            android:layout_width="200dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+
+            <TextView
+                android:id="@+id/event_intro"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="16dp"
+                android:text="Event-Details"/>
+
+            <TextView
+                android:id="@+id/event_id"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/event_date"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/event_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/event_station"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/event_job"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/event_trigger"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_eventsource_line"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <!--
+            <ImageView
+                android:id="@+id/device_image"
+                android:layout_width="90dp"
+                android:layout_height="match_parent"
+                app:srcCompat="@drawable/ic_bett"
+                />
+            -->
+            <TextView
+                android:id="@+id/beacon_intro"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="16dp"
+                android:text="Beacon-Details"/>
+
+            <TextView
+                android:id="@+id/beacon_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/beacon_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/beacon_model"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/beacon_manufacturer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/beacon_location"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+
+            <TextView
+                android:id="@+id/beacon_macadress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</RelativeLayout>

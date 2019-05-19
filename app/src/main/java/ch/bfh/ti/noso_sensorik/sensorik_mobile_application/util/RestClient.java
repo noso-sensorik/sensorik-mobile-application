@@ -1,4 +1,4 @@
-package ch.bfh.ti.noso_sensorik.sensorik_mobile_application;
+package ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util;
 
 import android.util.Log;
 
@@ -27,7 +27,6 @@ public class RestClient {
         client.get(getAbsoluteUrl(url), params, responseHandler);
     }
 
-
     public static void post(String url, StringEntity params, JsonHttpResponseHandler responseHandler) {
         Log.i(TAG, "attempting to post to: '" + getAbsoluteUrl(url) + "'");
         params.setContentType(new BasicHeader(HTTP.CONTENT_TYPE, "application/json"));
@@ -41,7 +40,6 @@ public class RestClient {
     public static void postByUrl(String url, RequestParams params, AsyncHttpResponseHandler responseHandler) {
         client.post(url, params, responseHandler);
     }
-
 
     private static String getAbsoluteUrl(String relativeUrl) {
         return BASE_URL + relativeUrl;

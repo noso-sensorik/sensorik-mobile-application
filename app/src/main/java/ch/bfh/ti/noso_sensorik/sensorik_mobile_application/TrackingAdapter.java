@@ -49,22 +49,22 @@ public class TrackingAdapter extends ArrayAdapter<IBeaconDevice> {
         } else {
             beaconName.setText("" + iBeacon.getAddress());
         }
-        beaconUuid.setText("" + iBeacon.getProximityUUID());
+
+        beaconUuid.setText("" + iBeacon.getUniqueId());
         beaconMajorMinor.setText("Major: " + iBeacon.getMajor() + ", Minor: " + iBeacon.getMinor());
 //        beaconLastSeen.setText("" + iBeacon.getTimestamp());
-        distance.setText("" + iBeacon.getProximity());
+        beaconUuid.setText("" + iBeacon.getProximity());
 
         // set the corresponding image depending on Major
-        // 1 = Bed / 2 = Dispenser / 3 = Scrub bottle
+        // 1 = Bed / 2 = Dispenser / 3 = Scrub bottle / 4 = Semi-Stationary disp
         if(iBeacon.getMajor() == 1){
-            Log.d(TAG, "Beacon is allocated to a Bed");
             imgView.setImageResource(R.drawable.ic_bett);
         } else if(iBeacon.getMajor() == 2){
-            Log.d(TAG, "Beacon is allocated to a Dispenser");
             imgView.setImageResource(R.drawable.ic_dispenser);
         } else if(iBeacon.getMajor() == 3){
-            Log.d(TAG, "Beacon is allocated to a Scrub bottle");
             imgView.setImageResource(R.drawable.ic_doctor);
+        } else if(iBeacon.getMajor() == 4){
+        imgView.setImageResource(R.drawable.ic_doctor);
         }
 
         // interpret the distance according to
