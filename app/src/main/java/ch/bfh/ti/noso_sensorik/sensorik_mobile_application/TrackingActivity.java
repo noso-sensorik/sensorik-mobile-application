@@ -1,8 +1,14 @@
 package ch.bfh.ti.noso_sensorik.sensorik_mobile_application;
 
+import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -36,12 +42,14 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Beacon;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.BeaconType;
+import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.DCN;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Event;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.EventTrigger;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util.BeaconListener;
@@ -58,17 +66,16 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
     private String department;
     private String job;
+    private String IMEI, IMSI;
 
-//    private TrackingAdapter mTrackadapder;
+    //    private TrackingAdapter mTrackadapder;
     private TrackingEventAdapter mTrackadapder;
     private ArrayList<Event> eventList;
-    private ArrayList<IBeaconDevice> foundBeaconList;
 
     private ArrayList<IBeaconDevice> arrayOfBeacons;
     private ArrayList<IBeaconDevice> currentlyKnownBeacons;
-    private ArrayList<Integer> currentlyKnownMinors;
+    private ArrayList<String> currentlyKnownSemiStatDisps;
 
-    private String AssetTagName = "ntZ2co";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,13 +84,27 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_tracking);
 
+        String serviceName = Context.TELEPHONY_SERVICE;
+        TelephonyManager m_telephonyManager = (TelephonyManager) getSystemService(serviceName);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+        IMEI = m_telephonyManager.getImei();
+        IMSI = m_telephonyManager.getSubscriberId();
+
         // Get the Intent that started this activity and extract the strings
         Intent intent = getIntent();
         department = intent.getStringExtra(MainActivity.DEPARTMENT);
         job = intent.getStringExtra(MainActivity.JOB);
 
-        foundBeaconList = new ArrayList<IBeaconDevice>();
         currentlyKnownBeacons = new ArrayList<IBeaconDevice>();
+        currentlyKnownSemiStatDisps = new ArrayList<String>();
 
         setupButtons();
         setupProximityManager();
@@ -132,9 +153,8 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         //proximityManager.setIBeaconListener(new BeaconListener());
         proximityManager.setIBeaconListener(createIBeaconListener());
         proximityManager.setSecureProfileListener(createSecureProfileListener());
-        proximityManager.filters().iBeaconFilter(IBeaconFilters.newMinorFilter(2010));
-
-//        proximityManager.filters().iBeaconFilter(IBeaconFilters.newMajorFilter(3));
+//        proximityManager.filters().iBeaconFilter(IBeaconFilters.newMinorFilter(1005));
+//        proximityManager.filters().iBeaconFilter(IBeaconFilters.newMajorFilter(4));
     }
 
     /**
@@ -263,6 +283,10 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                                 int deviceTime = telemetry.getTimestamp();
                                 if(deviceTime != 0){
                                     Log.i(TAG, "onProfilesUpdated: last threshold - "+telemetry.getLastThreshold() + " timestamp: '" + telemetry.getTimestamp()+"'");
+                                    if(telemetry.getLastThreshold() < 4){
+                                        Log.i(TAG,"onProfilesUpdated: call event function"  );
+                                        usedSemistationaryDispenser(profile);
+                                    }
                                 }
 //                                if(acceleration != null){
 //                                    Log.i(TAG, "onProfilesUpdated: acceleration -  X: " + acceleration.getX() + " Y: " + acceleration.getY() + " Z: " + acceleration.getZ());
@@ -288,7 +312,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         return new IBeaconListener() {
             @Override
             public void onIBeaconDiscovered(IBeaconDevice iBeacon, IBeaconRegion region) {
-                Log.i(TAG, "onIBeaconDiscovered: new Beacon found");
+                Log.i(TAG, "onIBeaconDiscovered: new Beacon found " + iBeacon.toString());
 
                 switch (iBeacon.getMajor()){
                     case 1:
@@ -325,7 +349,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                             //handleUpdatedMobileScrubBottle(iBeacon);
                             break;
                         case 4:
-                            //handleUpdatedSemiStatDisp(iBeacon);
+                            handleUpdatedSemiStatDisp(iBeacon);
                             break;
                         default:
                             // none of the above matched...
@@ -369,25 +393,26 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         try {
             if(iBeacon.getProximity().equals(Proximity.NEAR)){ // we discovered a beacon nearby, fire event
                 newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_PATIENT_ZONE-1),
-                        new Beacon((iBeacon.getMajor()-1), "(1) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress())
-                );
+                        LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_PATIENT_ZONE-1), iBeacon.getRssi(),
+                        new Beacon((iBeacon.getMajor()-1), "(1) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT ));
 
                 Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
                 restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
 //                eventList.add(newEvent);
                 mTrackadapder.insert(newEvent,0);
-            } else if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
-
+                currentlyKnownBeacons.add(iBeacon);
+            } else if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discover a beacon and are directly IMMEDIATE (should never happen...)
                 newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_PATIENT_ZONE-1),
-                        new Beacon((iBeacon.getMajor()-1), "(2.1) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress())
+                        LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE-1), iBeacon.getRssi(),
+                        new Beacon((iBeacon.getMajor()-1), "(2.1) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
-
                 Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
                 restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
 //                eventList.add(newEvent);
                 mTrackadapder.insert(newEvent,0);
+                currentlyKnownBeacons.add(iBeacon);
             }
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
@@ -403,21 +428,96 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
     private void handleUpdatedPatZone(IBeaconDevice iBeacon) {
         Log.v(TAG, "handleUpdatedPatZone(): enter for "+iBeacon.toString());
 
-        if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discovered a beacon in immediate distance, fire event
-            Event newEvent = new Event(
-                    LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE-1),
-                    new Beacon((iBeacon.getMajor()-1), "(2.2) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress())
-            );
+        if(! (currentlyKnownBeacons.contains(iBeacon)) ) {  // we don't already known the beacon
+            if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)) { // we discovered a beacon in immediate distance, fire event
+                Event newEvent = new Event(
+                        LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
+                        new Beacon((iBeacon.getMajor() - 1), "(2.2) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
+                );
 
-            try {
-                Log.d(TAG, "handleUpdatedPatZone(): logged event: " +newEvent.toString() );
-                restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
-//                eventList.add(newEvent);
-                mTrackadapder.insert(newEvent,0);
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
-            } catch (JSONException e) {
-                e.printStackTrace();
+                try {
+                    Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
+                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                    //                eventList.add(newEvent);
+                    mTrackadapder.insert(newEvent, 0);
+                    currentlyKnownBeacons.add(iBeacon);
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        } else { // we already know the beacon
+
+            // but maybe the proximity has changed? if the proximity is NEAR instead of IMMEDIATE or vice-versa then we need to fire another event
+            IBeaconDevice tmpBeacon = currentlyKnownBeacons.get(currentlyKnownBeacons.indexOf(iBeacon));
+            if(tmpBeacon.getProximity() != iBeacon.getProximity()){ // proximity changed
+                if(iBeacon.getProximity().equals(Proximity.FAR)){
+                    Log.d(TAG, "handleUpdatedPatZone(): proximity changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
+                    Event newEvent = new Event(
+                            LocalDate.now(), LocalTime.now(), department, job, (Event.LEAVING_PATIENT_ZONE - 1), iBeacon.getRssi(),
+                            new Beacon((iBeacon.getMajor() - 1), "(2.3) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                            new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
+                    );
+
+                    try {
+                        Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
+                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                        //                eventList.add(newEvent);
+                        mTrackadapder.insert(newEvent, 0);
+                        currentlyKnownBeacons.remove(tmpBeacon);
+                        currentlyKnownBeacons.add(iBeacon);
+                    } catch (UnsupportedEncodingException e) {
+                        e.printStackTrace();
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                } else if (iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
+                    Log.d(TAG, "handleUpdatedPatZone(): proximity changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
+                    Event newEvent = new Event(
+                            LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
+                            new Beacon((iBeacon.getMajor() - 1), "(2.2) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                            new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
+                    );
+
+                    try {
+                        Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
+                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                        //                eventList.add(newEvent);
+                        mTrackadapder.insert(newEvent, 0);
+                        currentlyKnownBeacons.remove(tmpBeacon);
+                        currentlyKnownBeacons.add(iBeacon);
+                    } catch (UnsupportedEncodingException e) {
+                        e.printStackTrace();
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+            } else {
+                Log.d(TAG, "handleUpdatedPatZone(): proximity has NOT changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
+                if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
+                    Event newEvent = new Event(
+                            LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
+                            new Beacon((iBeacon.getMajor() - 1), "(2.2) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                            new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
+                    );
+
+                    try {
+                        Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
+                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                        //                eventList.add(newEvent);
+                        mTrackadapder.insert(newEvent, 0);
+                        currentlyKnownBeacons.remove(tmpBeacon);
+                        currentlyKnownBeacons.add(iBeacon);
+                    } catch (UnsupportedEncodingException e) {
+                        e.printStackTrace();
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
             }
         }
 
@@ -430,8 +530,9 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
         if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discovered a beacon in immediate distance, fire event
             Event newEvent = new Event(
-                    LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_STATIONARY_DISPENSER-1),
-                    new Beacon((iBeacon.getMajor()-1), "(4) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress())
+                    LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
+                    new Beacon((iBeacon.getMajor()-1), "(4) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                    new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
             );
 
             try {
@@ -457,8 +558,9 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         if(! (currentlyKnownBeacons.contains(iBeacon)) ) {  // we don't already known the beacon
             if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discovered a beacon in immediate distance, fire event
                 Event newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_STATIONARY_DISPENSER-1),
-                        new Beacon((iBeacon.getMajor()-1), "(4) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress())
+                        LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
+                        new Beacon((iBeacon.getMajor()-1), "(4) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
 
                 try {
@@ -478,8 +580,9 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             // if the proximity is NEAR instead of IMMEDIATE, then we are leaving the range and should "forget" the beacon
             if(iBeacon.getProximity().equals(Proximity.NEAR)) {
                 Event newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.LEAVING_STATIONARY_DISPENSER-1),
-                        new Beacon((iBeacon.getMajor()-1), "(5) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress())
+                        LocalDate.now(), LocalTime.now(), department, job, (Event.LEAVING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
+                        new Beacon((iBeacon.getMajor()-1), "(5) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
 
                 try {
@@ -511,11 +614,96 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
     private void handleDiscoveredMobileScrubBottle(IBeaconDevice iBeacon) {
 
+
     }
 
     private void handlesDiscoveredSemiStatDisp(IBeaconDevice iBeacon) {
+        Log.v(TAG, "handlesDiscoveredSemiStatDisp(): enter for " + iBeacon.toString());
 
+        if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
+            currentlyKnownBeacons.add(iBeacon);
+            currentlyKnownSemiStatDisps.add(getNameForMinor(iBeacon.getMinor()));
+            Log.v(TAG, "handlesDiscoveredSemiStatDisp(): beacon in IMMEDIATE PROXIMITY, added to known list " + iBeacon.toString());
+        }
+
+        Log.v(TAG, "handlesDiscoveredSemiStatDisp(): leave");
     }
 
+    private void handleUpdatedSemiStatDisp(IBeaconDevice iBeacon) {
+        Log.v(TAG, "handleUpdatedSemiStatDisp(): enter for " + iBeacon.toString());
+
+        if(!(currentlyKnownBeacons.contains(iBeacon))){
+            if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
+                currentlyKnownBeacons.add(iBeacon);
+                currentlyKnownSemiStatDisps.add(getNameForMinor(iBeacon.getMinor()));
+                Log.v(TAG, "handleUpdatedSemiStatDisp(): beacon in IMMEDIATE PROXIMITY, added to known list " + iBeacon.toString());
+            }
+        }
+
+        Log.v(TAG, "handleUpdatedSemiStatDisp(): leave");
+    }
+
+    private String getNameForMinor(int minor){
+        switch (minor) {
+            case 4001:
+                return "tag01-ttOIcr";
+            case 4002:
+                return "tag02-ttZCRU";
+            case 4003:
+                return "tag03-ttcYPV";
+            case 4004:
+                return "tag04-tthXUc";
+            case 4005:
+                return "tag05-ttj3di";
+            case 4006:
+                return "tag06-tt6N6y";
+            case 4007:
+                return "tag07-ttv1x0";
+            case 4008:
+                return "tag08-ttwKPG";
+            case 4009:
+                return "tag09-ntCOx5";
+            case 4010:
+                return "tag10-ntl3eY";
+        }
+        return "";
+    }
+
+
+    private void usedSemistationaryDispenser(ISecureProfile profile){
+        Log.v(TAG, "usedSemistationaryDispenser(): enter for " + profile.toString());
+        Log.i(TAG, "usedSemistationaryDispenser(): size of list of known disps " + currentlyKnownSemiStatDisps.size());
+
+        String tmpProfileName = profile.getName();
+        Iterator itr = currentlyKnownSemiStatDisps.iterator();
+        while(itr.hasNext()) {
+            String tmpBeaconName = (String) itr.next();
+            Log.i(TAG,"usedSemistationaryDispenser(): comparing name of " + tmpProfileName + " with " + tmpBeaconName );
+            if(tmpBeaconName.equals(tmpProfileName)){
+                // the disp used is one in immediate proximity, send event
+                Event newEvent = new Event(
+                        LocalDate.now(), LocalTime.now(), department, job, (Event.USING_SEMI_STATIONARY_DISPENSER-1), profile.getRssi(),
+                        new Beacon((4-1), "(7) Test Beacon (" + tmpBeaconName +")", "Smart Beacon SB18-3", "Kontakt.io", "Labor", profile.getMacAddress()),
+                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
+                );
+
+                try {
+                    Log.d(TAG, "usedSemistationaryDispenser(): logged event: " +newEvent.toString() );
+                    Log.d(TAG, "usedSemistationaryDispenser(): logged event: " +newEvent.toJSON() );
+                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+//                eventList.add(newEvent);
+                    mTrackadapder.insert(newEvent, 0);
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        }
+
+        Log.v(TAG, "usedSemistationaryDispenser(): leave");
+
+    }
 
 }

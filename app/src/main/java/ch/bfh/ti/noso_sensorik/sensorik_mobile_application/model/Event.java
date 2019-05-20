@@ -35,18 +35,21 @@ public class Event {
     private String station;
     private String job;
     private int trigger;
+    private int rssi;
 
     @ManyToOne(cascade = {CascadeType.ALL})
     private Beacon eventSource;
-//	private DataCollectionNode collectedFrom;
+	private DCN collectedFrom;
 
-    public Event(LocalDate date, LocalTime time, String station, String job, int trigger, Beacon eventSource) {
+    public Event(LocalDate date, LocalTime time, String station, String job, int trigger, int rssi, Beacon eventSource, DCN collectedFrom) {
         this.date = date;
         this.time = time;
         this.station = station;
         this.job = job;
         this.trigger = trigger;
+        this.rssi = rssi;
         this.eventSource = eventSource;
+        this.collectedFrom = collectedFrom;
     }
 
     public JSONObject toJSON() throws JSONException {
@@ -57,17 +60,28 @@ public class Event {
         rp.put("time", this.time);
         rp.put("station", this.station);
         rp.put("job", this.job);
+        rp.put("rssi", this.rssi);
         rp.put("trigger", this.trigger);
 
         // Details on the eventsource (= the beacon)
         JSONObject innerObj = new JSONObject();
-        innerObj.put("type", this.eventSource.getType() );
+        innerObj.put("type", this.eventSource.getType());
         innerObj.put("label", "" + this.eventSource.getLabel());
         innerObj.put("model", this.eventSource.getModel());
         innerObj.put("manufacturer", this.eventSource.getManufacturer());
-        innerObj.put("loc", this.eventSource.getLocation());
-        innerObj.put("mac", "" + this.eventSource.getMacadress());
+        innerObj.put("location", this.eventSource.getLocation());
+        innerObj.put("macadress", "" + this.eventSource.getMacadress());
         rp.put("eventSource", innerObj);
+
+
+        // Details on the eventsource (= the beacon)
+        JSONObject innerObj2 = new JSONObject();
+        innerObj2.put("label", "" + this.collectedFrom.getLabel());
+        innerObj2.put("manufacturer", this.collectedFrom.getManufacturer());
+        innerObj2.put("model", this.collectedFrom.getModel());
+        innerObj2.put("imei", this.collectedFrom.getIMEI());
+        innerObj2.put("fingerprint", "" + this.collectedFrom.getFingerprint());
+        rp.put("collectedFrom", innerObj2);
 
         return rp;
     }

@@ -55,7 +55,10 @@ public class TrackingEventAdapter extends ArrayAdapter<Event> {
 
         // Populate the data into the template view using the data object
         if((currentEvent.getId() == null) || (currentEvent.getId().equals(""))){
-            eventID.setText("Beacon " + beacon.getLabel().split("#")[1]);
+            if(beacon.getLabel().contains("#"))
+                eventID.setText("Beacon " + beacon.getLabel().split("#")[1]);
+            else
+                eventID.setText("Beacon " + beacon.getLabel() );
         } else {
             eventID.setText("" + currentEvent.getId());
         }
