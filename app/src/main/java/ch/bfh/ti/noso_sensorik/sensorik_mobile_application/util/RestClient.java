@@ -29,8 +29,8 @@ public class RestClient {
 
     public static void post(String url, StringEntity params, JsonHttpResponseHandler responseHandler) {
         Log.i(TAG, "attempting to post to: '" + getAbsoluteUrl(url) + "'");
-        params.setContentType(new BasicHeader(HTTP.CONTENT_TYPE, "application/json"));
-        client.post(null, getAbsoluteUrl(url), params, "application/json", responseHandler);
+        params.setContentType(new BasicHeader(HTTP.CONTENT_TYPE, "application/json;charset=UTF-8"));
+        client.post(null, getAbsoluteUrl(url), params, "application/json;charset=UTF-8", responseHandler);
     }
 
     public static void getByUrl(String url, RequestParams params, AsyncHttpResponseHandler responseHandler) {

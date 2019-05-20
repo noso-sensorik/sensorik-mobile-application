@@ -68,10 +68,15 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
     //Since Android Marshmallow starting a Bluetooth Low Energy scan requires permission from location group.
     private void checkPermissions() {
-        int checkSelfPermissionResult = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION);
-        if (PackageManager.PERMISSION_GRANTED != checkSelfPermissionResult) {
+        int checkSelfPermissionResultLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION);
+        if (PackageManager.PERMISSION_GRANTED != checkSelfPermissionResultLocation) {
             //Permission not granted so we ask for it. Results are handled in onRequestPermissionsResult() callback.
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_CODE_PERMISSIONS);
+        }
+        int checkSelfPermissionResultPhone = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE);
+        if (PackageManager.PERMISSION_GRANTED != checkSelfPermissionResultPhone) {
+            //Permission not granted so we ask for it. Results are handled in onRequestPermissionsResult() callback.
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_PHONE_STATE}, REQUEST_CODE_PERMISSIONS);
         }
     }
 

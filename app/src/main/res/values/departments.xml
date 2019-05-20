@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="departments_array">
-        <item>Abteilung XY1</item>
-        <item>Abteilung XY2</item>
-        <item>Abteilung XY3</item>
+        <item>Intensivstation/Neonatologie</item>
+        <item>Kardiologie</item>
+        <item>Neuropädiatrie</item>
         <item>Abteilung XY4</item>
         <item>Abteilung XY5</item>
         <item>Abteilung XY6</item>

@@ -2,6 +2,6 @@
 <resources>
     <string-array name="jobs_array">
         <item>Pflegepersonal</item>
-        <item>Ärzteschaft</item>
+        <item>&#196;rzteschaft</item>
     </string-array>
 </resources>

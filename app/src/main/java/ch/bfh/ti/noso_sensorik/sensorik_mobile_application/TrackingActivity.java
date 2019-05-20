@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.telephony.TelephonyManager;
@@ -38,6 +39,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.UnsupportedEncodingException;
+import java.security.Permission;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -56,8 +58,12 @@ import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util.BeaconListener;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util.RestClientUsage;
 import cz.msebera.android.httpclient.entity.StringEntity;
 
+import static android.Manifest.permission.READ_PHONE_STATE;
+
 public class TrackingActivity extends AppCompatActivity implements View.OnClickListener {
     protected static final String TAG = "TrackingActivity";
+
+    private static final int REQUEST_CODE_PERMISSIONS = 100;
 
     private ProximityManager proximityManager;
     private boolean isScanning = false;
@@ -86,14 +92,11 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
         String serviceName = Context.TELEPHONY_SERVICE;
         TelephonyManager m_telephonyManager = (TelephonyManager) getSystemService(serviceName);
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            return;
+
+        int checkSelfPermissionResultPhone = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE);
+        if (PackageManager.PERMISSION_GRANTED != checkSelfPermissionResultPhone) {
+            //Permission not granted so we ask for it. Results are handled in onRequestPermissionsResult() callback.
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_PHONE_STATE}, REQUEST_CODE_PERMISSIONS);
         }
         IMEI = m_telephonyManager.getImei();
         IMSI = m_telephonyManager.getSubscriberId();
@@ -398,7 +401,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT ));
 
                 Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
-                restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
 //                eventList.add(newEvent);
                 mTrackadapder.insert(newEvent,0);
                 currentlyKnownBeacons.add(iBeacon);
@@ -409,13 +412,11 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
                 Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
-                restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
 //                eventList.add(newEvent);
                 mTrackadapder.insert(newEvent,0);
                 currentlyKnownBeacons.add(iBeacon);
             }
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
         } catch (JSONException e) {
             e.printStackTrace();
         }
@@ -438,12 +439,10 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                 try {
                     Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
                     //                eventList.add(newEvent);
                     mTrackadapder.insert(newEvent, 0);
                     currentlyKnownBeacons.add(iBeacon);
-                } catch (UnsupportedEncodingException e) {
-                    e.printStackTrace();
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
@@ -463,13 +462,11 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                     try {
                         Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
                         //                eventList.add(newEvent);
                         mTrackadapder.insert(newEvent, 0);
                         currentlyKnownBeacons.remove(tmpBeacon);
                         currentlyKnownBeacons.add(iBeacon);
-                    } catch (UnsupportedEncodingException e) {
-                        e.printStackTrace();
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
@@ -483,13 +480,11 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                     try {
                         Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
                         //                eventList.add(newEvent);
                         mTrackadapder.insert(newEvent, 0);
                         currentlyKnownBeacons.remove(tmpBeacon);
                         currentlyKnownBeacons.add(iBeacon);
-                    } catch (UnsupportedEncodingException e) {
-                        e.printStackTrace();
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
@@ -505,13 +500,11 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                     try {
                         Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
                         //                eventList.add(newEvent);
                         mTrackadapder.insert(newEvent, 0);
                         currentlyKnownBeacons.remove(tmpBeacon);
                         currentlyKnownBeacons.add(iBeacon);
-                    } catch (UnsupportedEncodingException e) {
-                        e.printStackTrace();
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
@@ -538,12 +531,10 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             try {
                 Log.d(TAG, "handleDiscoveredStatDisp(): logged event: " +newEvent.toString() );
                 Log.d(TAG, "handleDiscoveredStatDisp(): logged event: " +newEvent.toJSON() );
-                restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
 //                eventList.add(newEvent);
                 mTrackadapder.insert(newEvent, 0);
                 currentlyKnownBeacons.add(iBeacon);
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -566,12 +557,10 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 try {
                     Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toString() );
                     Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toJSON() );
-                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
 //                eventList.add(newEvent);
                     mTrackadapder.insert(newEvent, 0);
                     currentlyKnownBeacons.add(iBeacon);
-                } catch (UnsupportedEncodingException e) {
-                    e.printStackTrace();
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
@@ -588,12 +577,10 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 try {
                     Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toString() );
                     Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toJSON() );
-                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
 //                eventList.add(newEvent);
                     mTrackadapder.insert(newEvent, 0);
                     currentlyKnownBeacons.remove(iBeacon);
-                } catch (UnsupportedEncodingException e) {
-                    e.printStackTrace();
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
@@ -690,11 +677,9 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 try {
                     Log.d(TAG, "usedSemistationaryDispenser(): logged event: " +newEvent.toString() );
                     Log.d(TAG, "usedSemistationaryDispenser(): logged event: " +newEvent.toJSON() );
-                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString()));
+                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
 //                eventList.add(newEvent);
                     mTrackadapder.insert(newEvent, 0);
-                } catch (UnsupportedEncodingException e) {
-                    e.printStackTrace();
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
