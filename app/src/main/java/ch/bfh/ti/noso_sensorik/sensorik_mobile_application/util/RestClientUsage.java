@@ -57,4 +57,23 @@ public class RestClientUsage {
             }
         });
     }
+
+    public void postScrubbottle(StringEntity params){
+        RestClient.post("scrubbottles", params, new JsonHttpResponseHandler(){
+            @Override
+            public void onFailure(int statusCode, Header[] headers, Throwable throwable, JSONObject errorResponse){
+                Log.w(TAG, "Posting failed, received status code: " + statusCode);
+                if( (headers != null) && (headers.length > 0)){
+                    for (Header header :headers) {
+                        Log.w(TAG, "received Header: '" + header.getName() + "' with value '" + header.getValue() +"'");
+                    }
+                }
+            }
+
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
+                super.onSuccess(statusCode, headers, response);
+            }
+        });
+    }
 }

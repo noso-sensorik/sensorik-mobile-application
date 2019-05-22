@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.PowerManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -54,6 +55,7 @@ import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.BeaconType;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.DCN;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Event;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.EventTrigger;
+import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Scrubbottle;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util.BeaconListener;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util.RestClientUsage;
 import cz.msebera.android.httpclient.entity.StringEntity;
@@ -64,6 +66,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
     protected static final String TAG = "TrackingActivity";
 
     private static final int REQUEST_CODE_PERMISSIONS = 100;
+    private static final int THRESHOLD_ALLOWANCE = 4;
 
     private ProximityManager proximityManager;
     private boolean isScanning = false;
@@ -72,6 +75,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
     private String department;
     private String job;
+    private String scrubbottle;
     private String IMEI, IMSI;
 
     //    private TrackingAdapter mTrackadapder;
@@ -81,6 +85,8 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
     private ArrayList<IBeaconDevice> arrayOfBeacons;
     private ArrayList<IBeaconDevice> currentlyKnownBeacons;
     private ArrayList<String> currentlyKnownSemiStatDisps;
+
+    protected PowerManager.WakeLock mWakeLock;
 
 
     @Override
@@ -105,6 +111,9 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         Intent intent = getIntent();
         department = intent.getStringExtra(MainActivity.DEPARTMENT);
         job = intent.getStringExtra(MainActivity.JOB);
+        scrubbottle = intent.getStringExtra(MainActivity.SCRUBBOTTLE);
+
+        Log.d(TAG, "onCreate(): scrubbottle is '" + scrubbottle + "'");
 
         currentlyKnownBeacons = new ArrayList<IBeaconDevice>();
         currentlyKnownSemiStatDisps = new ArrayList<String>();
@@ -121,6 +130,10 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 //        mTrackadapder = new TrackingAdapter(this, arrayOfBeacons);
         mTrackadapder = new TrackingEventAdapter(this, eventList);
 
+        // https://stackoverflow.com/questions/18276355/how-to-keep-a-foreground-app-running-24-7
+        final PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        this.mWakeLock = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "My Tag");
+        this.mWakeLock.acquire();
 
         // Attach the adapter to a ListView
         ListView listView = (ListView) findViewById(R.id.listView_beaconstatus);
@@ -199,16 +212,22 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         }
     }
 
-    @Override
-    protected void onStop() {
+//    @Override
+//    protected void onStop() {
         //Stop scanning when leaving screen.
-        stopScanning();
-        super.onStop();
+//        stopScanning();
+//        super.onStop();
+//    }
+
+    @Override
+    protected void onPause(){
+        super.onPause();
     }
 
     @Override
     protected void onDestroy() {
         //Remember to disconnect when finished.
+        this.mWakeLock.release();
         proximityManager.disconnect();
         super.onDestroy();
     }
@@ -248,22 +267,20 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                 if((profile.getUniqueId() != null) && !(profile.getUniqueId().isEmpty())){
                     Log.i(TAG, "onProfileDiscovered: Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
-                    if((profile.getUniqueId().equals("ttOIcr"))){
-                        // Extract telemetry
-                        KontaktTelemetry telemetry = profile.getTelemetry();
-                        if (telemetry != null) {
-                            // Get acceleration, temperature, light level and device time
-                            Acceleration acceleration = telemetry.getAcceleration();
-                            int temperature = telemetry.getTemperature();
-                            int lightLevel = telemetry.getLightSensor();
-                            int deviceTime = telemetry.getTimestamp();
-                            if(deviceTime != 0){
-                                Log.i(TAG, "onProfileDiscovered: last threshold - "+telemetry.getLastThreshold() + " timestamp: '" + telemetry.getTimestamp()+"'");
-                            }
+                    // Extract telemetry
+                    KontaktTelemetry telemetry = profile.getTelemetry();
+                    if (telemetry != null) {
+                        // Get acceleration, temperature, light level and device time
+                        Acceleration acceleration = telemetry.getAcceleration();
+                        int temperature = telemetry.getTemperature();
+                        int lightLevel = telemetry.getLightSensor();
+                        int deviceTime = telemetry.getTimestamp();
+                        if(deviceTime != 0){
+                            Log.i(TAG, "onProfileDiscovered: last threshold - "+telemetry.getLastThreshold() + " timestamp: '" + telemetry.getTimestamp()+"'");
+                        }
 //                            if(acceleration != null){
 //                                Log.i(TAG, "onProfileDiscovered: acceleration -  X: " + acceleration.getX() + " Y: " + acceleration.getY() + " Z: " + acceleration.getZ());
 //                            }
-                        }
                     }
                 }
             }
@@ -271,9 +288,18 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             @Override
             public void onProfilesUpdated(List<ISecureProfile> profiles) {
                 for (ISecureProfile profile : profiles) {
-//                    Log.i(TAG, "onProfilesUpdated(): Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
+//                   Log.i(TAG, "onProfilesUpdated(): Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
                     if((profile.getUniqueId() != null) && !(profile.getUniqueId().isEmpty())){
-                        if((profile.getUniqueId().equals("ttOIcr"))){
+                        if(profile.getUniqueId().equals(scrubbottle)){
+                            // get acceleration data
+                            KontaktTelemetry telemetry = profile.getTelemetry();
+                            if (telemetry != null) {
+                                if( (telemetry.getAcceleration() != null)){
+                                    Log.i(TAG, "onProfilesUpdated: scrubbottle logging - Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
+                                    logScrubbottle(telemetry.getAcceleration(), profile);
+                                }
+                            }
+                        } else {
                             Log.i(TAG, "onProfilesUpdated: Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
 
                             // Extract telemetry
@@ -281,12 +307,9 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                             if (telemetry != null) {
                                 // Get acceleration, temperature, light level and device time
                                 Acceleration acceleration = telemetry.getAcceleration();
-                                int temperature = telemetry.getTemperature();
-                                int lightLevel = telemetry.getLightSensor();
-                                int deviceTime = telemetry.getTimestamp();
-                                if(deviceTime != 0){
+                                if(telemetry.getTimestamp() != 0){
                                     Log.i(TAG, "onProfilesUpdated: last threshold - "+telemetry.getLastThreshold() + " timestamp: '" + telemetry.getTimestamp()+"'");
-                                    if(telemetry.getLastThreshold() < 4){
+                                    if(telemetry.getLastThreshold() < THRESHOLD_ALLOWANCE){
                                         Log.i(TAG,"onProfilesUpdated: call event function"  );
                                         usedSemistationaryDispenser(profile);
                                     }
@@ -296,6 +319,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 //                                }
                             }
                         }
+
                     }
                 }
             }
@@ -305,9 +329,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
             }
         };
-
     }
-
 
     // ------------------------------
 
@@ -397,7 +419,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             if(iBeacon.getProximity().equals(Proximity.NEAR)){ // we discovered a beacon nearby, fire event
                 newEvent = new Event(
                         LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_PATIENT_ZONE-1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor()-1), "(1) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT ));
 
                 Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
@@ -408,7 +430,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             } else if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discover a beacon and are directly IMMEDIATE (should never happen...)
                 newEvent = new Event(
                         LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE-1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor()-1), "(2.1) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
                 Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
@@ -433,7 +455,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)) { // we discovered a beacon in immediate distance, fire event
                 Event newEvent = new Event(
                         LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor() - 1), "(2.2) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new Beacon((iBeacon.getMajor() - 1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
 
@@ -456,7 +478,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                     Log.d(TAG, "handleUpdatedPatZone(): proximity changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
                     Event newEvent = new Event(
                             LocalDate.now(), LocalTime.now(), department, job, (Event.LEAVING_PATIENT_ZONE - 1), iBeacon.getRssi(),
-                            new Beacon((iBeacon.getMajor() - 1), "(2.3) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                            new Beacon((iBeacon.getMajor() - 1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                             new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                     );
 
@@ -474,7 +496,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                     Log.d(TAG, "handleUpdatedPatZone(): proximity changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
                     Event newEvent = new Event(
                             LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
-                            new Beacon((iBeacon.getMajor() - 1), "(2.2) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                            new Beacon((iBeacon.getMajor() - 1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                             new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                     );
 
@@ -494,7 +516,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
                     Event newEvent = new Event(
                             LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
-                            new Beacon((iBeacon.getMajor() - 1), "(2.2) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                            new Beacon((iBeacon.getMajor() - 1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                             new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                     );
 
@@ -524,7 +546,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discovered a beacon in immediate distance, fire event
             Event newEvent = new Event(
                     LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
-                    new Beacon((iBeacon.getMajor()-1), "(4) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                    new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                     new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
             );
 
@@ -550,7 +572,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discovered a beacon in immediate distance, fire event
                 Event newEvent = new Event(
                         LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor()-1), "(4) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
 
@@ -570,7 +592,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             if(iBeacon.getProximity().equals(Proximity.NEAR)) {
                 Event newEvent = new Event(
                         LocalDate.now(), LocalTime.now(), department, job, (Event.LEAVING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor()-1), "(5) Test Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
+                        new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
 
@@ -670,7 +692,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 // the disp used is one in immediate proximity, send event
                 Event newEvent = new Event(
                         LocalDate.now(), LocalTime.now(), department, job, (Event.USING_SEMI_STATIONARY_DISPENSER-1), profile.getRssi(),
-                        new Beacon((4-1), "(7) Test Beacon (" + tmpBeaconName +")", "Smart Beacon SB18-3", "Kontakt.io", "Labor", profile.getMacAddress()),
+                        new Beacon((4-1), "Beacon (" + tmpBeaconName +")", "Smart Beacon SB18-3", "Kontakt.io", "Labor", profile.getMacAddress()),
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
 
@@ -688,6 +710,25 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         }
 
         Log.v(TAG, "usedSemistationaryDispenser(): leave");
+
+    }
+
+    private void logScrubbottle(Acceleration acceleration, ISecureProfile profile) {
+        Log.v(TAG, "logScrubbottle(): enter");
+
+        Scrubbottle tmpScrubbottle = new Scrubbottle(
+                LocalDate.now(), LocalTime.now(), acceleration.getX(), acceleration.getY(), acceleration.getY(), profile.getRssi(), profile.getUniqueId(), department, job,
+                new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
+        );
+
+        try {
+            Log.d(TAG, "logScrubbottle(): logged event: " +tmpScrubbottle.toString() );
+            restClient.postScrubbottle(new StringEntity(tmpScrubbottle.toJSON().toString(), "UTF-8"));
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        Log.v(TAG, "logScrubbottle(): leave");
 
     }
 

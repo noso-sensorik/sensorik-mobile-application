@@ -3,5 +3,6 @@
     <string name="activity_main_title">Handhygiene-Tracker</string>
     <string name="label_department">Abteilung</string>
     <string name="label_job">Job</string>
+    <string name="label_scrubbottle">Kittelflaschen-ID</string>
     <string name="button_start">Start</string>
 </resources>

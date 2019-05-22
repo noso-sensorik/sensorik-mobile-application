@@ -13,6 +13,7 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
 
@@ -21,11 +22,13 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     protected static final String TAG = "MainActivity";
     public static final String JOB = "com.example.myfirstapp.MESSAGE.JOB";
     public static final String DEPARTMENT = "com.example.myfirstapp.MESSAGE.DEPARTMENT";
+    public static final String SCRUBBOTTLE = "com.example.myfirstapp.MESSAGE.SCRUBBOTTLE";
 
     private static final int REQUEST_CODE_PERMISSIONS = 100;
 
     private String department;
     private String job;
+    private String scrubbottle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +66,6 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     // and save the name in the application and keep tabs on the sensor during Tracking Activity
     // (maybe make a filter for it?) and analyse its acceleratings
     protected void prepareScrubbottleSelection(){
-
     }
 
     //Since Android Marshmallow starting a Bluetooth Low Energy scan requires permission from location group.
@@ -106,9 +108,17 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         if( ((department != null) && (job != null)) &&  (!(department.isEmpty()) && !(job.isEmpty())) ){
             Log.d(TAG, "Department is: '"+department+ "' and Job is: '"+job+ "'");
 
+            EditText input_scrubbottle = (EditText) findViewById(R.id.input_scrubbottle_id);
+            if( (input_scrubbottle.getText().length() > 0) ) {
+                scrubbottle = input_scrubbottle.getText().toString();
+                Log.d(TAG, "startTracking(): scrubbottle is '" + scrubbottle + "'");
+            } else {
+                scrubbottle = "";
+            }
             Intent intent = new Intent(this, TrackingActivity.class);
             intent.putExtra(DEPARTMENT, department);
             intent.putExtra(JOB, job);
+            intent.putExtra(SCRUBBOTTLE, scrubbottle);
             startActivity(intent);
         }
     }
