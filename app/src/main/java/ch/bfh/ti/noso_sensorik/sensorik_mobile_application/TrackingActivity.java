@@ -1,6 +1,7 @@
 package ch.bfh.ti.noso_sensorik.sensorik_mobile_application;
 
 import android.Manifest;
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -13,6 +14,7 @@ import android.os.Bundle;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.Toast;
@@ -39,6 +41,9 @@ import com.kontakt.sdk.android.common.profile.ISecureProfile;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.Permission;
 import java.time.LocalDate;
@@ -47,16 +52,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Beacon;
-import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.BeaconType;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.DCN;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Event;
-import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.EventTrigger;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Scrubbottle;
-import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util.BeaconListener;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util.RestClientUsage;
 import cz.msebera.android.httpclient.entity.StringEntity;
 
@@ -86,8 +90,11 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
     private ArrayList<IBeaconDevice> currentlyKnownBeacons;
     private ArrayList<String> currentlyKnownSemiStatDisps;
 
-    protected PowerManager.WakeLock mWakeLock;
+    private static boolean stopTask;
 
+    private String filename = "tracking.txt";
+    private FileOutputStream outputStream;
+    private File file;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,14 +137,39 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 //        mTrackadapder = new TrackingAdapter(this, arrayOfBeacons);
         mTrackadapder = new TrackingEventAdapter(this, eventList);
 
-        // https://stackoverflow.com/questions/18276355/how-to-keep-a-foreground-app-running-24-7
-        final PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        this.mWakeLock = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "My Tag");
-        this.mWakeLock.acquire();
-
         // Attach the adapter to a ListView
         ListView listView = (ListView) findViewById(R.id.listView_beaconstatus);
         listView.setAdapter(mTrackadapder);
+
+        // force screen on
+        //https://stackoverflow.com/questions/2131948/force-screen-on
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        // Start your (polling) task
+//        stopTask = false;
+//        TimerTask task = new TimerTask() {
+//            @Override
+//            public void run() {
+//
+//                // If you wish to stop the task/polling
+//                if (stopTask){
+//                    this.cancel();
+//                }
+//
+//                // The first in the list of RunningTasks is always the foreground task.
+//                ActivityManager activityManager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+//                List<ActivityManager.RunningAppProcessInfo> tasks = activityManager.getRunningAppProcesses();
+//                String foregroundTaskPackageNameTest = tasks.get(0).processName;
+//
+//                // Check foreground app: If it is not in the foreground... bring it!
+//                if (!foregroundTaskPackageNameTest.equals("ch.bfh.ti.noso_sensorik.sensorik_mobile_application")){
+//                    Intent LaunchIntent = getPackageManager().getLaunchIntentForPackage("ch.bfh.ti.noso_sensorik.sensorik_mobile_application");
+//                    startActivity(LaunchIntent);
+//                }
+//            }
+//        };
+//        Timer timer = new Timer();
+//        timer.scheduleAtFixedRate(task, 0, 5);
 
         restClient = new RestClientUsage();
         Log.d(TAG, "onCreate: tracking initialized");
@@ -212,23 +244,33 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         }
     }
 
-//    @Override
+    @Override
+    protected void onPause(){
+        super.onPause();
+
+//        this.o;
+
+    }
+
+    //    @Override
 //    protected void onStop() {
-        //Stop scanning when leaving screen.
+    //Stop scanning when leaving screen.
 //        stopScanning();
 //        super.onStop();
 //    }
 
     @Override
-    protected void onPause(){
-        super.onPause();
-    }
-
-    @Override
     protected void onDestroy() {
         //Remember to disconnect when finished.
-        this.mWakeLock.release();
         proximityManager.disconnect();
+        stopTask = true;
+
+        try {
+            outputStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         super.onDestroy();
     }
 
@@ -423,8 +465,11 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT ));
 
                 Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
-                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-//                eventList.add(newEvent);
+//                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                outputStream.write((newEvent.toJSON().toString().getBytes()));
+                outputStream.close();
+
                 mTrackadapder.insert(newEvent,0);
                 currentlyKnownBeacons.add(iBeacon);
             } else if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discover a beacon and are directly IMMEDIATE (should never happen...)
@@ -434,13 +479,16 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                         new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
                 );
                 Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
-                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-//                eventList.add(newEvent);
-                mTrackadapder.insert(newEvent,0);
+//                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                outputStream.write((newEvent.toJSON().toString().getBytes()));
+                outputStream.close();                mTrackadapder.insert(newEvent,0);
                 currentlyKnownBeacons.add(iBeacon);
             }
         } catch (JSONException e) {
             e.printStackTrace();
+        } catch (IOException e) {
+            System.out.println("Exception while writing file " + e);
         }
 
 
@@ -461,12 +509,16 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                 try {
                     Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                    //                eventList.add(newEvent);
+//                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                    outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                    outputStream.write((newEvent.toJSON().toString().getBytes()));
+                    outputStream.close();
                     mTrackadapder.insert(newEvent, 0);
                     currentlyKnownBeacons.add(iBeacon);
                 } catch (JSONException e) {
                     e.printStackTrace();
+                } catch (IOException e) {
+                    System.out.println("Exception while writing file " + e);
                 }
             }
         } else { // we already know the beacon
@@ -484,13 +536,17 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                     try {
                         Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                        //                eventList.add(newEvent);
+//                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                        outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                        outputStream.write((newEvent.toJSON().toString().getBytes()));
+                        outputStream.close();
                         mTrackadapder.insert(newEvent, 0);
                         currentlyKnownBeacons.remove(tmpBeacon);
                         currentlyKnownBeacons.add(iBeacon);
                     } catch (JSONException e) {
                         e.printStackTrace();
+                    } catch (IOException e) {
+                        System.out.println("Exception while writing file " + e);
                     }
                 } else if (iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
                     Log.d(TAG, "handleUpdatedPatZone(): proximity changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
@@ -502,13 +558,17 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                     try {
                         Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                        //                eventList.add(newEvent);
+//                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                        outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                        outputStream.write((newEvent.toJSON().toString().getBytes()));
+                        outputStream.close();
                         mTrackadapder.insert(newEvent, 0);
                         currentlyKnownBeacons.remove(tmpBeacon);
                         currentlyKnownBeacons.add(iBeacon);
                     } catch (JSONException e) {
                         e.printStackTrace();
+                    } catch (IOException e) {
+                        System.out.println("Exception while writing file " + e);
                     }
                 }
             } else {
@@ -522,17 +582,19 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
                     try {
                         Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                        //                eventList.add(newEvent);
+//                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                        outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                        outputStream.write((newEvent.toJSON().toString().getBytes()));
+                        outputStream.close();
                         mTrackadapder.insert(newEvent, 0);
                         currentlyKnownBeacons.remove(tmpBeacon);
                         currentlyKnownBeacons.add(iBeacon);
                     } catch (JSONException e) {
                         e.printStackTrace();
+                    } catch (IOException e) {
+                        System.out.println("Exception while writing file " + e);
                     }
-
                 }
-
             }
         }
 
@@ -553,12 +615,16 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             try {
                 Log.d(TAG, "handleDiscoveredStatDisp(): logged event: " +newEvent.toString() );
                 Log.d(TAG, "handleDiscoveredStatDisp(): logged event: " +newEvent.toJSON() );
-                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-//                eventList.add(newEvent);
+//                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                outputStream.write((newEvent.toJSON().toString().getBytes()));
+                outputStream.close();
                 mTrackadapder.insert(newEvent, 0);
                 currentlyKnownBeacons.add(iBeacon);
             } catch (JSONException e) {
                 e.printStackTrace();
+            } catch (IOException e) {
+                System.out.println("Exception while writing file " + e);
             }
         }
 
@@ -579,12 +645,16 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 try {
                     Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toString() );
                     Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toJSON() );
-                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-//                eventList.add(newEvent);
+//                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                    outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                    outputStream.write((newEvent.toJSON().toString().getBytes()));
+                    outputStream.close();
                     mTrackadapder.insert(newEvent, 0);
                     currentlyKnownBeacons.add(iBeacon);
                 } catch (JSONException e) {
                     e.printStackTrace();
+                } catch (IOException e) {
+                    System.out.println("Exception while writing file " + e);
                 }
             }
         } else { // beacon already known and because we only add this kind of beacon when IMMEDIATE, it should be IMMEDIATE
@@ -599,12 +669,16 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 try {
                     Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toString() );
                     Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toJSON() );
-                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-//                eventList.add(newEvent);
+//                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                    outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                    outputStream.write((newEvent.toJSON().toString().getBytes()));
+                    outputStream.close();
                     mTrackadapder.insert(newEvent, 0);
                     currentlyKnownBeacons.remove(iBeacon);
                 } catch (JSONException e) {
                     e.printStackTrace();
+                } catch (IOException e) {
+                    System.out.println("Exception while writing file " + e);
                 }
             }
         }
@@ -699,10 +773,14 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 try {
                     Log.d(TAG, "usedSemistationaryDispenser(): logged event: " +newEvent.toString() );
                     Log.d(TAG, "usedSemistationaryDispenser(): logged event: " +newEvent.toJSON() );
-                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-//                eventList.add(newEvent);
+//                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
+                    outputStream = openFileOutput(filename, Context.MODE_APPEND);
+                    outputStream.write((newEvent.toJSON().toString().getBytes()));
+                    outputStream.close();
                     mTrackadapder.insert(newEvent, 0);
                 } catch (JSONException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
                     e.printStackTrace();
                 }
 
@@ -723,8 +801,13 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
 
         try {
             Log.d(TAG, "logScrubbottle(): logged event: " +tmpScrubbottle.toString() );
-            restClient.postScrubbottle(new StringEntity(tmpScrubbottle.toJSON().toString(), "UTF-8"));
+//            restClient.postScrubbottle(new StringEntity(tmpScrubbottle.toJSON().toString(), "UTF-8"));
+            outputStream = openFileOutput(filename, Context.MODE_APPEND);
+            outputStream.write((tmpScrubbottle.toJSON().toString().getBytes()));
+            outputStream.close();
         } catch (JSONException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
