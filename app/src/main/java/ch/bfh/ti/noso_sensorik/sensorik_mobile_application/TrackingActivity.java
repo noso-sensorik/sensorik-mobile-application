@@ -2,12 +2,21 @@ package ch.bfh.ti.noso_sensorik.sensorik_mobile_application;
 
 import android.Manifest;
 import android.app.ActivityManager;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.IBinder;
 import android.os.PowerManager;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -22,14 +31,10 @@ import android.widget.Toast;
 import com.kontakt.sdk.android.ble.configuration.ScanMode;
 import com.kontakt.sdk.android.ble.configuration.ScanPeriod;
 import com.kontakt.sdk.android.ble.connection.OnServiceReadyListener;
-import com.kontakt.sdk.android.ble.discovery.ibeacon.IBeaconDeviceEvent;
-import com.kontakt.sdk.android.ble.filter.ibeacon.IBeaconFilter;
-import com.kontakt.sdk.android.ble.filter.ibeacon.IBeaconFilters;
 import com.kontakt.sdk.android.ble.manager.ProximityManager;
 import com.kontakt.sdk.android.ble.manager.ProximityManagerFactory;
 import com.kontakt.sdk.android.ble.manager.listeners.IBeaconListener;
 import com.kontakt.sdk.android.ble.manager.listeners.SecureProfileListener;
-import com.kontakt.sdk.android.ble.manager.listeners.simple.SimpleSecureProfileListener;
 import com.kontakt.sdk.android.ble.spec.Acceleration;
 import com.kontakt.sdk.android.ble.spec.KontaktTelemetry;
 import com.kontakt.sdk.android.common.Proximity;
@@ -37,24 +42,11 @@ import com.kontakt.sdk.android.common.profile.IBeaconDevice;
 import com.kontakt.sdk.android.common.profile.IBeaconRegion;
 import com.kontakt.sdk.android.common.profile.ISecureProfile;
 
-
 import org.json.JSONException;
-import org.json.JSONObject;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.security.Permission;
-import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Beacon;
@@ -64,37 +56,17 @@ import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Scrubbottle;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.util.RestClientUsage;
 import cz.msebera.android.httpclient.entity.StringEntity;
 
-import static android.Manifest.permission.READ_PHONE_STATE;
-
 public class TrackingActivity extends AppCompatActivity implements View.OnClickListener {
     protected static final String TAG = "TrackingActivity";
-
     private static final int REQUEST_CODE_PERMISSIONS = 100;
-    private static final int THRESHOLD_ALLOWANCE = 4;
 
-    private ProximityManager proximityManager;
-    private boolean isScanning = false;
+    private Intent serviceIntent;
+    private Intent mServiceIntent;
+    private TrackingService trackingService;
+    private Context ctx;
+    private boolean isServiceStarted = false;
 
-    private RestClientUsage restClient;
-
-    private String department;
-    private String job;
-    private String scrubbottle;
-    private String IMEI, IMSI;
-
-    //    private TrackingAdapter mTrackadapder;
-    private TrackingEventAdapter mTrackadapder;
-    private ArrayList<Event> eventList;
-
-    private ArrayList<IBeaconDevice> arrayOfBeacons;
-    private ArrayList<IBeaconDevice> currentlyKnownBeacons;
-    private ArrayList<String> currentlyKnownSemiStatDisps;
-
-    private static boolean stopTask;
-
-    private String filename = "tracking.txt";
-    private FileOutputStream outputStream;
-    private File file;
+    protected PowerManager.WakeLock mWakeLock;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -103,6 +75,60 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_tracking);
 
+        // initialize receiver
+//        IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
+//        filter.addAction(Intent.ACTION_SCREEN_OFF);
+//        BroadcastReceiver mReceiver = new TrackingRestarterBroadcastReceiver();
+//        registerReceiver(mReceiver, filter);
+
+        /* This code together with the one in onDestroy()
+         * will make the screen be always on until this Activity gets destroyed. */
+        final PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        this.mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "noso_sensorik:sensorik_mobile");
+        this.mWakeLock.acquire();
+
+        initChannels(this);
+        setupButtons();
+        ctx = this;
+
+//        trackingService = new TrackingService(this.ctx);
+        mServiceIntent = new Intent(this.ctx, TrackingService.class);
+        if (!isMyServiceRunning(TrackingService.class)) {
+            mServiceIntent.putExtra("DEPARTMENT", getIntent().getStringExtra(MainActivity.DEPARTMENT));
+            mServiceIntent.putExtra("JOB", getIntent().getStringExtra(MainActivity.JOB));
+            mServiceIntent.putExtra("SCRUBBOTTLE", getIntent().getStringExtra(MainActivity.SCRUBBOTTLE));
+            mServiceIntent.putExtra("IMEI", getIMEI());
+            Log.d(TAG, "onCreate(): IMEI is " + getIMEI());
+            startService(mServiceIntent);
+        }
+
+        // start service
+//        serviceIntent = new Intent(this, TrackingService.class);
+//        serviceIntent.putExtra("DEPARTMENT", getIntent().getStringExtra(MainActivity.DEPARTMENT));
+//        serviceIntent.putExtra("JOB", getIntent().getStringExtra(MainActivity.JOB));
+//        serviceIntent.putExtra("SCRUBBOTTLE", getIntent().getStringExtra(MainActivity.SCRUBBOTTLE));
+//        serviceIntent.putExtra("IMEI", getIMEI());
+
+//        bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE);
+//        if(!isServiceStarted){
+//            startForegroundService(serviceIntent);
+//            isServiceStarted = true;
+//        }
+
+        Log.d(TAG, "onCreate: tracking initialized");
+    }
+
+    public void initChannels(Context context) {
+        if (Build.VERSION.SDK_INT < 26) {
+            return;
+        }
+//        NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+//        NotificationChannel channel = new NotificationChannel("default","Hygiene Events Channel", NotificationManager.IMPORTANCE_HIGH);
+//        channel.setDescription("Notification Channel for Hygiene Events");
+//        notificationManager.createNotificationChannel(channel);
+    }
+
+    private String getIMEI(){
         String serviceName = Context.TELEPHONY_SERVICE;
         TelephonyManager m_telephonyManager = (TelephonyManager) getSystemService(serviceName);
 
@@ -111,68 +137,7 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
             //Permission not granted so we ask for it. Results are handled in onRequestPermissionsResult() callback.
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_PHONE_STATE}, REQUEST_CODE_PERMISSIONS);
         }
-        IMEI = m_telephonyManager.getImei();
-        IMSI = m_telephonyManager.getSubscriberId();
-
-        // Get the Intent that started this activity and extract the strings
-        Intent intent = getIntent();
-        department = intent.getStringExtra(MainActivity.DEPARTMENT);
-        job = intent.getStringExtra(MainActivity.JOB);
-        scrubbottle = intent.getStringExtra(MainActivity.SCRUBBOTTLE);
-
-        Log.d(TAG, "onCreate(): scrubbottle is '" + scrubbottle + "'");
-
-        currentlyKnownBeacons = new ArrayList<IBeaconDevice>();
-        currentlyKnownSemiStatDisps = new ArrayList<String>();
-
-        setupButtons();
-        setupProximityManager();
-        startScanning();
-
-        // Construct the data source
-        arrayOfBeacons = new ArrayList<IBeaconDevice>();
-        eventList = new ArrayList<Event>();
-
-        // Create the adapter to convert the array to views
-//        mTrackadapder = new TrackingAdapter(this, arrayOfBeacons);
-        mTrackadapder = new TrackingEventAdapter(this, eventList);
-
-        // Attach the adapter to a ListView
-        ListView listView = (ListView) findViewById(R.id.listView_beaconstatus);
-        listView.setAdapter(mTrackadapder);
-
-        // force screen on
-        //https://stackoverflow.com/questions/2131948/force-screen-on
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        // Start your (polling) task
-//        stopTask = false;
-//        TimerTask task = new TimerTask() {
-//            @Override
-//            public void run() {
-//
-//                // If you wish to stop the task/polling
-//                if (stopTask){
-//                    this.cancel();
-//                }
-//
-//                // The first in the list of RunningTasks is always the foreground task.
-//                ActivityManager activityManager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-//                List<ActivityManager.RunningAppProcessInfo> tasks = activityManager.getRunningAppProcesses();
-//                String foregroundTaskPackageNameTest = tasks.get(0).processName;
-//
-//                // Check foreground app: If it is not in the foreground... bring it!
-//                if (!foregroundTaskPackageNameTest.equals("ch.bfh.ti.noso_sensorik.sensorik_mobile_application")){
-//                    Intent LaunchIntent = getPackageManager().getLaunchIntentForPackage("ch.bfh.ti.noso_sensorik.sensorik_mobile_application");
-//                    startActivity(LaunchIntent);
-//                }
-//            }
-//        };
-//        Timer timer = new Timer();
-//        timer.scheduleAtFixedRate(task, 0, 5);
-
-        restClient = new RestClientUsage();
-        Log.d(TAG, "onCreate: tracking initialized");
+        return m_telephonyManager.getDeviceId();
     }
 
     /**
@@ -185,112 +150,106 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
         stopScanButton.setOnClickListener(this);
     }
 
-    /**
-     * Prepares the proximity manager
-     */
-    private void setupProximityManager() {
-        proximityManager = ProximityManagerFactory.create(this);
+    @Override
+    protected void onStart(){
+        Log.d(TAG, "onStart: start tracking...");
+        super.onStart();
 
-        //Configure proximity manager basic options
-        proximityManager.configuration()
-                .scanPeriod(ScanPeriod.RANGING)                                         //Using ranging for continuous scanning or MONITORING for scanning with intervals
-                .scanMode(ScanMode.LOW_LATENCY)                                          //Using BALANCED for best performance/battery ratio
-                .deviceUpdateCallbackInterval(TimeUnit.SECONDS.toMillis(1));    //OnDeviceUpdate callback will be received with 1 seconds interval
+//        if(!isServiceStarted){
+//            startForegroundService(serviceIntent);
+//            isServiceStarted = true;
+//        }
 
-        //Setting up iBeacon listeners
-        //proximityManager.setIBeaconListener(new BeaconListener());
-        proximityManager.setIBeaconListener(createIBeaconListener());
-        proximityManager.setSecureProfileListener(createSecureProfileListener());
-//        proximityManager.filters().iBeaconFilter(IBeaconFilters.newMinorFilter(1005));
-//        proximityManager.filters().iBeaconFilter(IBeaconFilters.newMajorFilter(4));
+        Log.d(TAG, "onStart: tracking started");
     }
 
-    /**
-     * Connect to scanning service and start scanning when ready.
-     * Also show a UI text hint.
-     */
-    private void startScanning() {
-        proximityManager.connect(new OnServiceReadyListener() {
-            @Override
-            public void onServiceReady() {
-                //Check if proximity manager is already scanning
-                if (proximityManager.isScanning()) {
-                    Toast.makeText(TrackingActivity.this, "Bereits am scannen", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                proximityManager.startScanning();
-                isScanning = true;
+    @Override
+    protected void onResume(){
+        Log.d(TAG, "onResume: resume tracking...");
+        super.onResume();
 
-                Button pauseButton = (Button) findViewById(R.id.button_pause);
-                pauseButton.setText("Scannen unterbrechen");
-                Toast.makeText(TrackingActivity.this, "Scanning gestartet", Toast.LENGTH_SHORT).show();
+//        if(!isServiceStarted){
+//            startForegroundService(serviceIntent);
+//            isServiceStarted = true;
+//        }
+        // only when screen turns on
+//        if (!TrackingRestarterBroadcastReceiver.wasScreenOn) {
+//            // this is when onResume() is called due to a screen state change
+//            System.out.println("SCREEN TURNED ON");
+//        } else {
+//            // this is when onResume() is called when the screen state has not changed
+//        }
+        super.onResume();
 
-                // FIXME: currently, if we continue a previously started scan any new results just get appended instead of existing results being updated
-            }
-        });
-
-    }
-
-    /**
-     * Stop scanning if scanning is in progress
-     */
-    private void stopScanning() {
-        if (proximityManager.isScanning()) {
-            proximityManager.stopScanning();
-            isScanning = false;
-            Button pauseButton = (Button) findViewById(R.id.button_pause);
-            pauseButton.setText("Scannen weiterführen");
-            Toast.makeText(this, "Scannen gestopt", Toast.LENGTH_SHORT).show();
-        }
+        Log.d(TAG, "onResume: tracking resumed");
     }
 
     @Override
     protected void onPause(){
+        Log.d(TAG, "onPause: pause tracking...");
         super.onPause();
 
-//        this.o;
+        // when the screen is about to turn off
+//        if (TrackingRestarterBroadcastReceiver.wasScreenOn) {
+//            // this is the case when onPause() is called by the system due to a screen state change
+//            System.out.println("SCREEN TURNED OFF");
+//            this.startService(new Intent(this, TrackingService.class));;
+//
+//        } else {
+//            // this is when onPause() is called when the screen state has not changed
+//        }
 
+        Log.d(TAG, "onPause: tracking paused");
     }
 
-    //    @Override
-//    protected void onStop() {
-    //Stop scanning when leaving screen.
-//        stopScanning();
-//        super.onStop();
-//    }
+    @Override
+    protected void onStop(){
+        Log.d(TAG, "onStop: stopping tracking...");
+        super.onStop();
+
+        Log.d(TAG, "onStop: tracking stopped");
+    }
 
     @Override
     protected void onDestroy() {
-        //Remember to disconnect when finished.
-        proximityManager.disconnect();
-        stopTask = true;
-
-        try {
-            outputStream.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
+        Log.d(TAG, "onDestroy: destroy tracking...");
         super.onDestroy();
+
+        this.mWakeLock.release();
+        stopService(mServiceIntent);
+
+        Log.d(TAG, "onDestroy: tracking destroyed");
     }
 
+    private boolean isMyServiceRunning(Class<?> serviceClass) {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.getName().equals(service.service.getClassName())) {
+                Log.i ("isMyServiceRunning?", true+"");
+                return true;
+            }
+        }
+        Log.i ("isMyServiceRunning?", false+"");
+        return false;
+    }
+
+    /**
+     * Called when a view has been clicked.
+     *
+     * @param view The view that was clicked.
+     */
     @Override
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.button_pause:
-                if(isScanning){
-                    stopScanning();
+                if(isServiceStarted){
+//                    mService.startScanning();
                 } else {
-                    startScanning();
+//                    mService.stopScanning();
                 }
-//                    try {
-//                        restClient.getEvents();
-//                    } catch (JSONException e) {
-//                        e.printStackTrace();
-//                    }
                 break;
             case R.id.button_terminate:
-                stopScanning();
+                stopService(serviceIntent);
                 // redirect to evaluation screen
                 Intent intent = new Intent(this, EvaluationActivity.class);
                 //HINT: do I need to pass all the collected events to the evaluation class?
@@ -299,520 +258,4 @@ public class TrackingActivity extends AppCompatActivity implements View.OnClickL
                 break;
         }
     }
-
-    // ----------------------
-
-    private SecureProfileListener createSecureProfileListener(){
-        return new SecureProfileListener() {
-            @Override
-            public void onProfileDiscovered(ISecureProfile profile) {
-
-                if((profile.getUniqueId() != null) && !(profile.getUniqueId().isEmpty())){
-                    Log.i(TAG, "onProfileDiscovered: Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
-                    // Extract telemetry
-                    KontaktTelemetry telemetry = profile.getTelemetry();
-                    if (telemetry != null) {
-                        // Get acceleration, temperature, light level and device time
-                        Acceleration acceleration = telemetry.getAcceleration();
-                        int temperature = telemetry.getTemperature();
-                        int lightLevel = telemetry.getLightSensor();
-                        int deviceTime = telemetry.getTimestamp();
-                        if(deviceTime != 0){
-                            Log.i(TAG, "onProfileDiscovered: last threshold - "+telemetry.getLastThreshold() + " timestamp: '" + telemetry.getTimestamp()+"'");
-                        }
-//                            if(acceleration != null){
-//                                Log.i(TAG, "onProfileDiscovered: acceleration -  X: " + acceleration.getX() + " Y: " + acceleration.getY() + " Z: " + acceleration.getZ());
-//                            }
-                    }
-                }
-            }
-
-            @Override
-            public void onProfilesUpdated(List<ISecureProfile> profiles) {
-                for (ISecureProfile profile : profiles) {
-//                   Log.i(TAG, "onProfilesUpdated(): Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
-                    if((profile.getUniqueId() != null) && !(profile.getUniqueId().isEmpty())){
-                        if(profile.getUniqueId().equals(scrubbottle)){
-                            // get acceleration data
-                            KontaktTelemetry telemetry = profile.getTelemetry();
-                            if (telemetry != null) {
-                                if( (telemetry.getAcceleration() != null)){
-                                    Log.i(TAG, "onProfilesUpdated: scrubbottle logging - Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
-                                    logScrubbottle(telemetry.getAcceleration(), profile);
-                                }
-                            }
-                        } else {
-                            Log.i(TAG, "onProfilesUpdated: Name: " + profile.getName() + ", Address: " +profile.getMacAddress() + ", Unique ID: '" + profile.getUniqueId() +"'");
-
-                            // Extract telemetry
-                            KontaktTelemetry telemetry = profile.getTelemetry();
-                            if (telemetry != null) {
-                                // Get acceleration, temperature, light level and device time
-                                Acceleration acceleration = telemetry.getAcceleration();
-                                if(telemetry.getTimestamp() != 0){
-                                    Log.i(TAG, "onProfilesUpdated: last threshold - "+telemetry.getLastThreshold() + " timestamp: '" + telemetry.getTimestamp()+"'");
-                                    if(telemetry.getLastThreshold() < THRESHOLD_ALLOWANCE){
-                                        Log.i(TAG,"onProfilesUpdated: call event function"  );
-                                        usedSemistationaryDispenser(profile);
-                                    }
-                                }
-//                                if(acceleration != null){
-//                                    Log.i(TAG, "onProfilesUpdated: acceleration -  X: " + acceleration.getX() + " Y: " + acceleration.getY() + " Z: " + acceleration.getZ());
-//                                }
-                            }
-                        }
-
-                    }
-                }
-            }
-
-            @Override
-            public void onProfileLost(ISecureProfile profile) {
-
-            }
-        };
-    }
-
-    // ------------------------------
-
-    private IBeaconListener createIBeaconListener() {
-        return new IBeaconListener() {
-            @Override
-            public void onIBeaconDiscovered(IBeaconDevice iBeacon, IBeaconRegion region) {
-                Log.i(TAG, "onIBeaconDiscovered: new Beacon found " + iBeacon.toString());
-
-                switch (iBeacon.getMajor()){
-                    case 1:
-                        handleDiscoveredPatZone(iBeacon);
-                        break;
-                    case 2:
-                        handleDiscoveredStatDisp(iBeacon);
-                        break;
-                    case 3:
-                        handleDiscoveredMobileScrubBottle(iBeacon);
-                        break;
-                    case 4:
-                        handlesDiscoveredSemiStatDisp(iBeacon);
-                        break;
-                    default:
-                        // none of the above matched...
-                        break;
-                }
-            }
-
-            @Override
-            public void onIBeaconsUpdated(List<IBeaconDevice> iBeacons, IBeaconRegion region) {
-                Log.i(TAG, "onIBeaconsUpdated(): " + iBeacons.size());
-                for (IBeaconDevice iBeacon: iBeacons) {
-
-                    switch (iBeacon.getMajor()){
-                        case 1:
-                            handleUpdatedPatZone(iBeacon);
-                            break;
-                        case 2:
-                            handleUpdatedStatDisp(iBeacon);
-                            break;
-                        case 3:
-                            //handleUpdatedMobileScrubBottle(iBeacon);
-                            break;
-                        case 4:
-                            handleUpdatedSemiStatDisp(iBeacon);
-                            break;
-                        default:
-                            // none of the above matched...
-                            break;
-                    }
-                }
-            }
-
-            @Override
-            public void onIBeaconLost(IBeaconDevice iBeacon, IBeaconRegion region) {
-                Log.e(TAG, "onIBeaconLost: " + iBeacon.toString());
-//                mTrackadapder.remove(iBeacon);
-
-                switch (iBeacon.getMajor()){
-                    case 1:
-//                        handleLostPatZone(iBeacon);
-                        break;
-                    case 2:
-                        handleLostStatDisp(iBeacon);
-                        break;
-                    case 3:
-                        //handleLostMobileScrubBottle(iBeacon);
-                        break;
-                    case 4:
-                        //handleLostSemiStatDisp(iBeacon);
-                        break;
-                    default:
-                        // none of the above matched...
-                        break;
-                }
-            }
-        };
-    }
-
-    // ------------------
-
-    private void handleDiscoveredPatZone(IBeaconDevice iBeacon) {
-        Log.v(TAG, "handleDiscoveredPatZone(): enter for " + iBeacon.toString());
-
-        Event newEvent;
-        try {
-            if(iBeacon.getProximity().equals(Proximity.NEAR)){ // we discovered a beacon nearby, fire event
-                newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_PATIENT_ZONE-1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT ));
-
-                Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
-//                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                outputStream.write((newEvent.toJSON().toString().getBytes()));
-                outputStream.close();
-
-                mTrackadapder.insert(newEvent,0);
-                currentlyKnownBeacons.add(iBeacon);
-            } else if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discover a beacon and are directly IMMEDIATE (should never happen...)
-                newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE-1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-                );
-                Log.d(TAG, "handleDiscoveredPatZone(): logged event: " +newEvent.toString() );
-//                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                outputStream.write((newEvent.toJSON().toString().getBytes()));
-                outputStream.close();                mTrackadapder.insert(newEvent,0);
-                currentlyKnownBeacons.add(iBeacon);
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            System.out.println("Exception while writing file " + e);
-        }
-
-
-        Log.v(TAG, "handleDiscoveredPatZone(): leave");
-
-    }
-
-    private void handleUpdatedPatZone(IBeaconDevice iBeacon) {
-        Log.v(TAG, "handleUpdatedPatZone(): enter for "+iBeacon.toString());
-
-        if(! (currentlyKnownBeacons.contains(iBeacon)) ) {  // we don't already known the beacon
-            if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)) { // we discovered a beacon in immediate distance, fire event
-                Event newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor() - 1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-                );
-
-                try {
-                    Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-//                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                    outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                    outputStream.write((newEvent.toJSON().toString().getBytes()));
-                    outputStream.close();
-                    mTrackadapder.insert(newEvent, 0);
-                    currentlyKnownBeacons.add(iBeacon);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    System.out.println("Exception while writing file " + e);
-                }
-            }
-        } else { // we already know the beacon
-
-            // but maybe the proximity has changed? if the proximity is NEAR instead of IMMEDIATE or vice-versa then we need to fire another event
-            IBeaconDevice tmpBeacon = currentlyKnownBeacons.get(currentlyKnownBeacons.indexOf(iBeacon));
-            if(tmpBeacon.getProximity() != iBeacon.getProximity()){ // proximity changed
-                if(iBeacon.getProximity().equals(Proximity.FAR)){
-                    Log.d(TAG, "handleUpdatedPatZone(): proximity changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
-                    Event newEvent = new Event(
-                            LocalDate.now(), LocalTime.now(), department, job, (Event.LEAVING_PATIENT_ZONE - 1), iBeacon.getRssi(),
-                            new Beacon((iBeacon.getMajor() - 1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                            new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-                    );
-
-                    try {
-                        Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-//                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                        outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                        outputStream.write((newEvent.toJSON().toString().getBytes()));
-                        outputStream.close();
-                        mTrackadapder.insert(newEvent, 0);
-                        currentlyKnownBeacons.remove(tmpBeacon);
-                        currentlyKnownBeacons.add(iBeacon);
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    } catch (IOException e) {
-                        System.out.println("Exception while writing file " + e);
-                    }
-                } else if (iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
-                    Log.d(TAG, "handleUpdatedPatZone(): proximity changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
-                    Event newEvent = new Event(
-                            LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
-                            new Beacon((iBeacon.getMajor() - 1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                            new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-                    );
-
-                    try {
-                        Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-//                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                        outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                        outputStream.write((newEvent.toJSON().toString().getBytes()));
-                        outputStream.close();
-                        mTrackadapder.insert(newEvent, 0);
-                        currentlyKnownBeacons.remove(tmpBeacon);
-                        currentlyKnownBeacons.add(iBeacon);
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    } catch (IOException e) {
-                        System.out.println("Exception while writing file " + e);
-                    }
-                }
-            } else {
-                Log.d(TAG, "handleUpdatedPatZone(): proximity has NOT changed from " +tmpBeacon.getProximity() + " to " + iBeacon.getProximity());
-                if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
-                    Event newEvent = new Event(
-                            LocalDate.now(), LocalTime.now(), department, job, (Event.DIRECTLY_IN_PATIENT_ZONE - 1), iBeacon.getRssi(),
-                            new Beacon((iBeacon.getMajor() - 1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                            new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-                    );
-
-                    try {
-                        Log.d(TAG, "handleUpdatedPatZone(): logged event: " + newEvent.toString());
-//                        restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                        outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                        outputStream.write((newEvent.toJSON().toString().getBytes()));
-                        outputStream.close();
-                        mTrackadapder.insert(newEvent, 0);
-                        currentlyKnownBeacons.remove(tmpBeacon);
-                        currentlyKnownBeacons.add(iBeacon);
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    } catch (IOException e) {
-                        System.out.println("Exception while writing file " + e);
-                    }
-                }
-            }
-        }
-
-        Log.v(TAG, "handleUpdatedPatZone(): enter");
-
-    }
-
-    private void handleDiscoveredStatDisp(IBeaconDevice iBeacon) {
-        Log.v(TAG, "handleDiscoveredStatDisp(): enter for " + iBeacon.toString());
-
-        if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discovered a beacon in immediate distance, fire event
-            Event newEvent = new Event(
-                    LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
-                    new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                    new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-            );
-
-            try {
-                Log.d(TAG, "handleDiscoveredStatDisp(): logged event: " +newEvent.toString() );
-                Log.d(TAG, "handleDiscoveredStatDisp(): logged event: " +newEvent.toJSON() );
-//                restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                outputStream.write((newEvent.toJSON().toString().getBytes()));
-                outputStream.close();
-                mTrackadapder.insert(newEvent, 0);
-                currentlyKnownBeacons.add(iBeacon);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                System.out.println("Exception while writing file " + e);
-            }
-        }
-
-        Log.v(TAG, "handleDiscoveredStatDisp(): leave");
-    }
-
-    private void handleUpdatedStatDisp(IBeaconDevice iBeacon) {
-        Log.v(TAG, "handleUpdatedStatDisp(): enter for " + iBeacon.toString());
-
-        if(! (currentlyKnownBeacons.contains(iBeacon)) ) {  // we don't already known the beacon
-            if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){ // we discovered a beacon in immediate distance, fire event
-                Event newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.APPROACHING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-                );
-
-                try {
-                    Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toString() );
-                    Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toJSON() );
-//                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                    outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                    outputStream.write((newEvent.toJSON().toString().getBytes()));
-                    outputStream.close();
-                    mTrackadapder.insert(newEvent, 0);
-                    currentlyKnownBeacons.add(iBeacon);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    System.out.println("Exception while writing file " + e);
-                }
-            }
-        } else { // beacon already known and because we only add this kind of beacon when IMMEDIATE, it should be IMMEDIATE
-            // if the proximity is NEAR instead of IMMEDIATE, then we are leaving the range and should "forget" the beacon
-            if(iBeacon.getProximity().equals(Proximity.NEAR)) {
-                Event newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.LEAVING_STATIONARY_DISPENSER-1), iBeacon.getRssi(),
-                        new Beacon((iBeacon.getMajor()-1), "Beacon #" + iBeacon.getMinor(), "Smart Beacon SB18-3", "Kontakt.io", "Labor", iBeacon.getAddress()),
-                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-                );
-
-                try {
-                    Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toString() );
-                    Log.d(TAG, "handleUpdatedStatDisp(): logged event: " +newEvent.toJSON() );
-//                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                    outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                    outputStream.write((newEvent.toJSON().toString().getBytes()));
-                    outputStream.close();
-                    mTrackadapder.insert(newEvent, 0);
-                    currentlyKnownBeacons.remove(iBeacon);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    System.out.println("Exception while writing file " + e);
-                }
-            }
-        }
-
-        Log.v(TAG, "handleUpdatedStatDisp(): leave");
-    }
-
-    private void handleLostStatDisp(IBeaconDevice iBeacon){
-        Log.v(TAG, "handleLostStatDisp(): enter for " + iBeacon.toString());
-
-
-
-        Log.v(TAG, "handleLostStatDisp(): leave");
-
-    }
-
-    private void handleDiscoveredMobileScrubBottle(IBeaconDevice iBeacon) {
-
-
-    }
-
-    private void handlesDiscoveredSemiStatDisp(IBeaconDevice iBeacon) {
-        Log.v(TAG, "handlesDiscoveredSemiStatDisp(): enter for " + iBeacon.toString());
-
-        if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
-            currentlyKnownBeacons.add(iBeacon);
-            currentlyKnownSemiStatDisps.add(getNameForMinor(iBeacon.getMinor()));
-            Log.v(TAG, "handlesDiscoveredSemiStatDisp(): beacon in IMMEDIATE PROXIMITY, added to known list " + iBeacon.toString());
-        }
-
-        Log.v(TAG, "handlesDiscoveredSemiStatDisp(): leave");
-    }
-
-    private void handleUpdatedSemiStatDisp(IBeaconDevice iBeacon) {
-        Log.v(TAG, "handleUpdatedSemiStatDisp(): enter for " + iBeacon.toString());
-
-        if(!(currentlyKnownBeacons.contains(iBeacon))){
-            if(iBeacon.getProximity().equals(Proximity.IMMEDIATE)){
-                currentlyKnownBeacons.add(iBeacon);
-                currentlyKnownSemiStatDisps.add(getNameForMinor(iBeacon.getMinor()));
-                Log.v(TAG, "handleUpdatedSemiStatDisp(): beacon in IMMEDIATE PROXIMITY, added to known list " + iBeacon.toString());
-            }
-        }
-
-        Log.v(TAG, "handleUpdatedSemiStatDisp(): leave");
-    }
-
-    private String getNameForMinor(int minor){
-        switch (minor) {
-            case 4001:
-                return "tag01-ttOIcr";
-            case 4002:
-                return "tag02-ttZCRU";
-            case 4003:
-                return "tag03-ttcYPV";
-            case 4004:
-                return "tag04-tthXUc";
-            case 4005:
-                return "tag05-ttj3di";
-            case 4006:
-                return "tag06-tt6N6y";
-            case 4007:
-                return "tag07-ttv1x0";
-            case 4008:
-                return "tag08-ttwKPG";
-            case 4009:
-                return "tag09-ntCOx5";
-            case 4010:
-                return "tag10-ntl3eY";
-        }
-        return "";
-    }
-
-
-    private void usedSemistationaryDispenser(ISecureProfile profile){
-        Log.v(TAG, "usedSemistationaryDispenser(): enter for " + profile.toString());
-        Log.i(TAG, "usedSemistationaryDispenser(): size of list of known disps " + currentlyKnownSemiStatDisps.size());
-
-        String tmpProfileName = profile.getName();
-        Iterator itr = currentlyKnownSemiStatDisps.iterator();
-        while(itr.hasNext()) {
-            String tmpBeaconName = (String) itr.next();
-            Log.i(TAG,"usedSemistationaryDispenser(): comparing name of " + tmpProfileName + " with " + tmpBeaconName );
-            if(tmpBeaconName.equals(tmpProfileName)){
-                // the disp used is one in immediate proximity, send event
-                Event newEvent = new Event(
-                        LocalDate.now(), LocalTime.now(), department, job, (Event.USING_SEMI_STATIONARY_DISPENSER-1), profile.getRssi(),
-                        new Beacon((4-1), "Beacon (" + tmpBeaconName +")", "Smart Beacon SB18-3", "Kontakt.io", "Labor", profile.getMacAddress()),
-                        new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-                );
-
-                try {
-                    Log.d(TAG, "usedSemistationaryDispenser(): logged event: " +newEvent.toString() );
-                    Log.d(TAG, "usedSemistationaryDispenser(): logged event: " +newEvent.toJSON() );
-//                    restClient.postEvent(new StringEntity(newEvent.toJSON().toString(), "UTF-8"));
-                    outputStream = openFileOutput(filename, Context.MODE_APPEND);
-                    outputStream.write((newEvent.toJSON().toString().getBytes()));
-                    outputStream.close();
-                    mTrackadapder.insert(newEvent, 0);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-            }
-        }
-
-        Log.v(TAG, "usedSemistationaryDispenser(): leave");
-
-    }
-
-    private void logScrubbottle(Acceleration acceleration, ISecureProfile profile) {
-        Log.v(TAG, "logScrubbottle(): enter");
-
-        Scrubbottle tmpScrubbottle = new Scrubbottle(
-                LocalDate.now(), LocalTime.now(), acceleration.getX(), acceleration.getY(), acceleration.getY(), profile.getRssi(), profile.getUniqueId(), department, job,
-                new DCN("DCN Label XY", this.IMEI, Build.MANUFACTURER, Build.MODEL, Build.FINGERPRINT )
-        );
-
-        try {
-            Log.d(TAG, "logScrubbottle(): logged event: " +tmpScrubbottle.toString() );
-//            restClient.postScrubbottle(new StringEntity(tmpScrubbottle.toJSON().toString(), "UTF-8"));
-            outputStream = openFileOutput(filename, Context.MODE_APPEND);
-            outputStream.write((tmpScrubbottle.toJSON().toString().getBytes()));
-            outputStream.close();
-        } catch (JSONException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        Log.v(TAG, "logScrubbottle(): leave");
-
-    }
-
 }

@@ -1,23 +1,16 @@
 package ch.bfh.ti.noso_sensorik.sensorik_mobile_application;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.ImageView;
 import android.widget.TextView;
 
-import com.kontakt.sdk.android.common.Proximity;
-import com.kontakt.sdk.android.common.profile.IBeaconDevice;
-
-import java.time.LocalDate;
 import java.util.ArrayList;
 
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Beacon;
 import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.Event;
-import ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model.EventTrigger;
 
 public class TrackingEventAdapter extends ArrayAdapter<Event> {
     protected static final String TAG = "TrackingAdapter";

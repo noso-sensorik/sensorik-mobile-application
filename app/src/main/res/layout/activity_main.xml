@@ -107,7 +107,6 @@
             android:layout_height="100dp"
             android:layout_margin="20dp"
             android:onClick="startTracking"
-            android:paddingVertical="20dp"
             android:paddingTop="15dp"
             android:text="@string/button_start" />
 

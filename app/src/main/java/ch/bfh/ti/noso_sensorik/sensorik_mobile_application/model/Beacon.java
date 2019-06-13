@@ -41,4 +41,30 @@ public class Beacon {
         this.location = location;
         this.macadress = macadress;
     }
+
+    public static String getNameForMinor(int minor){
+        switch (minor) {
+            case 4001:
+                return "tag01-ttOIcr";
+            case 4002:
+                return "tag02-ttZCRU";
+            case 4003:
+                return "tag03-ttcYPV";
+            case 4004:
+                return "tag04-tthXUc";
+            case 4005:
+                return "tag05-ttj3di";
+            case 4006:
+                return "tag06-tt6N6y";
+            case 4007:
+                return "tag07-ttv1x0";
+            case 4008:
+                return "tag08-ttwKPG";
+            case 4009:
+                return "tag09-ntCOx5";
+            case 4010:
+                return "tag10-ntl3eY";
+        }
+        return "";
+    }
 }

@@ -43,6 +43,8 @@ public class RestClientUsage {
         RestClient.post("events", params, new JsonHttpResponseHandler(){
             @Override
             public void onFailure(int statusCode, Header[] headers, Throwable throwable, JSONObject errorResponse){
+                Log.w(TAG, "onFailure: posting event failed, cause is: " + throwable.getCause() );
+
                 Log.w(TAG, "Posting failed, received status code: " + statusCode);
                 if( (headers != null) && (headers.length > 0)){
                     for (Header header :headers) {

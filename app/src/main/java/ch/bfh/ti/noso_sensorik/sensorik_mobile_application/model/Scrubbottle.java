@@ -2,11 +2,10 @@ package ch.bfh.ti.noso_sensorik.sensorik_mobile_application.model;
 
 import com.kontakt.sdk.android.ble.spec.Acceleration;
 
+import org.joda.time.LocalDate;
+import org.joda.time.LocalTime;
 import org.json.JSONException;
 import org.json.JSONObject;
-
-import java.time.LocalDate;
-import java.time.LocalTime;
 
 import javax.persistence.CascadeType;
 import javax.persistence.Entity;

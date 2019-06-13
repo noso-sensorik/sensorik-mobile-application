@@ -32,7 +32,17 @@
             android:name="com.kontakt.sdk.android.ble.service.ProximityService"
             android:exported="false" />
 
+        <service android:name=".TrackingService" android:enabled="true"/>
+
+        <receiver
+            android:name=".TrackingRestarterBroadcastReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:label="RestartServiceWhenStopped">
+        </receiver>
+
         <activity android:name=".EvaluationActivity"></activity>
+        <meta-data android:name="android.app.background_running" android:value="true"/>
     </application>
 
 </manifest>

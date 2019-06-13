@@ -95,7 +95,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     }
 
     private void disableButtons(){
-        Button startTrackingButton = findViewById(R.id.start_button);
+        Button startTrackingButton = (Button) findViewById(R.id.start_button);
         startTrackingButton.setEnabled(false);
     }
 

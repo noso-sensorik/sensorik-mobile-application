@@ -18,7 +18,8 @@ public class RestClient {
 
     // FIXME: DEV-URL, REPLACE WITH DEPLOYED BACKEND URL
     //private static final String BASE_URL = "http://localhost:8080/";
-    private static final String BASE_URL = "http://147.87.116.62:8080/sensorik-backend/";
+//    private static final String BASE_URL = "http://147.87.116.62:8080/sensorik-backend/";
+    private static final String BASE_URL = "http://3.122.231.31:8080/sensorik-backend/";
 
     private static AsyncHttpClient client = new AsyncHttpClient();
 
@@ -31,6 +32,7 @@ public class RestClient {
         Log.i(TAG, "attempting to post to: '" + getAbsoluteUrl(url) + "'");
         params.setContentType(new BasicHeader(HTTP.CONTENT_TYPE, "application/json;charset=UTF-8"));
         client.post(null, getAbsoluteUrl(url), params, "application/json;charset=UTF-8", responseHandler);
+
     }
 
     public static void getByUrl(String url, RequestParams params, AsyncHttpResponseHandler responseHandler) {
